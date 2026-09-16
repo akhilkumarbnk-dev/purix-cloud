@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:purix_academy/config/theme.dart';
-import 'package:purix_academy/models/user_model.dart';
+import 'package:purix_academy/config/app_config.dart';
 import 'package:purix_academy/services/auth_service.dart';
 import 'package:purix_academy/services/local_storage_service.dart';
+import 'package:purix_academy/models/user_model.dart';
 import 'package:purix_academy/screens/class_selection_screen.dart';
-import 'package:purix_academy/screens/dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   @override
@@ -14,12 +14,9 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final _authService = AuthService();
   final _localStorageService = LocalStorageService();
-  final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _emailController = TextEditingController();
   
   bool _isLoading = false;
-  bool _isExistingUser = false;
 
   @override
   void initState() {
@@ -27,102 +24,85 @@ class _LoginScreenState extends State<LoginScreen> {
     _checkExistingUser();
   }
 
-  // Check if user already logged in
   Future<void> _checkExistingUser() async {
     final user = await _localStorageService.getUser();
     if (user != null && user.phone != null && user.phone!.isNotEmpty) {
-      // User already logged in, go to dashboard
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => DashboardScreen()),
-      );
-    }
-  }
-
-  // Handle login
-  void _handleLogin() async {
-    final phone = _phoneController.text.trim();
-
-    if (phone.isEmpty || phone.length != 10) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Enter a valid 10-digit phone number')),
-      );
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    final result = await _authService.loginUser(phone: phone);
-
-    if (result['success'] == true) {
-      // User exists, go to dashboard
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (_) => DashboardScreen()),
-      );
-    } else {
-      // New user, show registration form
-      setState(() => _isExistingUser = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('New user detected. Please fill details.')),
-      );
-    }
-
-    setState(() => _isLoading = false);
-  }
-
-  // Handle registration
-  void _handleRegister() async {
-    final name = _nameController.text.trim();
-    final phone = _phoneController.text.trim();
-    final email = _emailController.text.trim();
-
-    if (name.isEmpty || phone.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Name and phone are required')),
-      );
-      return;
-    }
-
-    if (phone.length != 10) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Phone must be 10 digits')),
-      );
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    final result = await _authService.registerUser(
-      name: name,
-      phone: phone,
-      email: email,
-      selectedClass: 'Class 8', // Default class
-      language: 'ENG',
-    );
-
-    if (result['success'] == true) {
-      // Registration successful, go to class selection
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(builder: (_) => ClassSelectionScreen()),
       );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result['error'] ?? 'Registration failed')),
-      );
+    }
+  }
+
+  void _handleLogin() async {
+    final phone = _phoneController.text.trim();
+
+    if (phone.isEmpty) {
+      _showError('Please enter phone number');
+      return;
     }
 
-    setState(() => _isLoading = false);
+    if (phone.length != 10) {
+      _showError('Phone number must be 10 digits');
+      return;
+    }
+
+    if (!RegExp(r'^[0-9]{10}$').hasMatch(phone)) {
+      _showError('Please enter valid phone number');
+      return;
+    }
+
+    setState(() => _isLoading = true);
+
+    try {
+      final user = UserModel(
+        phone: phone,
+        name: 'Student',
+        email: '',
+        selectedClass: 'Class 8',
+        language: 'ENG',
+      );
+
+      await _localStorageService.saveUser(user);
+
+      final result = await _authService.loginUser(phone: phone);
+
+      if (!mounted) return;
+
+      if (result['success'] == true) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => ClassSelectionScreen()),
+        );
+      } else {
+        _showError(result['message'] ?? 'Login failed');
+      }
+    } catch (e) {
+      if (mounted) {
+        _showError('Error: ${e.toString()}');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: AppTheme.errorColor,
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: BoxDecoration(
-          color: AppTheme.backgroundColor,
-        ),
+        decoration: BoxDecoration(color: AppTheme.backgroundColor),
         child: SingleChildScrollView(
           child: Padding(
             padding: EdgeInsets.all(AppTheme.spacingL),
@@ -130,102 +110,224 @@ class _LoginScreenState extends State<LoginScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 SizedBox(height: 60),
-                
-                // Logo/Title
+
+                // Logo Section
+                Container(
+                  width: 120,
+                  height: 120,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.primaryColor.withOpacity(0.3),
+                        blurRadius: 20,
+                        spreadRadius: 3,
+                      ),
+                    ],
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppTheme.backgroundColor,
+                      border: Border.all(
+                        color: AppTheme.primaryColor.withOpacity(0.6),
+                        width: 2,
+                      ),
+                    ),
+                    child: Center(
+                      child: Image.asset(
+                        'assets/images/logo.png',
+                        width: 90,
+                        height: 90,
+                        fit: BoxFit.contain,
+                        errorBuilder: (context, error, stackTrace) {
+                          return Container(
+                            width: 90,
+                            height: 90,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: AppTheme.primaryColor.withOpacity(0.15),
+                            ),
+                            child: Center(
+                              child: Text(
+                                'P',
+                                style: TextStyle(
+                                  fontSize: 50,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppTheme.primaryColor,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                SizedBox(height: 30),
+
+                // Title
                 Text(
                   'PURIX ACADEMY',
-                  style: AppTheme.headingLarge.copyWith(
+                  style: AppTheme.headingMedium.copyWith(
                     color: AppTheme.primaryColor,
-                    fontSize: 28,
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
                   ),
                   textAlign: TextAlign.center,
                 ),
                 SizedBox(height: 8),
+
+                // Tagline
                 Text(
                   'NEW WAY OF LEARNING',
-                  style: AppTheme.bodyMedium.copyWith(
+                  style: AppTheme.bodySmall.copyWith(
                     color: AppTheme.primaryColor,
-                    fontSize: 12,
+                    fontSize: 11,
                     letterSpacing: 2,
+                    fontWeight: FontWeight.w500,
                   ),
                   textAlign: TextAlign.center,
                 ),
-                SizedBox(height: 60),
+                SizedBox(height: 50),
 
-                // Phone Input (Always visible)
-                TextField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  decoration: InputDecoration(
-                    hintText: 'Enter 10-digit phone number',
-                    prefixIcon: Icon(Icons.phone, color: AppTheme.primaryColor),
+                // Phone Input
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: AppTheme.primaryColor.withOpacity(0.3),
+                      width: 1.5,
+                    ),
                   ),
-                  enabled: !_isLoading,
+                  child: TextField(
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                    maxLength: 10,
+                    enabled: !_isLoading,
+                    style: AppTheme.bodyMedium,
+                    decoration: InputDecoration(
+                      hintText: '10-digit mobile number',
+                      hintStyle: AppTheme.bodyMedium.copyWith(
+                        color: AppTheme.textSecondaryColor,
+                      ),
+                      prefixIcon: Icon(
+                        Icons.phone,
+                        color: AppTheme.primaryColor,
+                      ),
+                      counterText: '',
+                      border: InputBorder.none,
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: AppTheme.spacingM,
+                        vertical: AppTheme.spacingM,
+                      ),
+                    ),
+                  ),
                 ),
-                SizedBox(height: AppTheme.spacingM),
+                SizedBox(height: AppTheme.spacingL),
 
-                // Conditional fields (show for new users)
-                if (!_isExistingUser) ...[
-                  TextField(
-                    controller: _nameController,
-                    decoration: InputDecoration(
-                      hintText: 'Enter your name',
-                      prefixIcon: Icon(Icons.person, color: AppTheme.primaryColor),
-                    ),
-                    enabled: !_isLoading,
-                  ),
-                  SizedBox(height: AppTheme.spacingM),
-                  TextField(
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    decoration: InputDecoration(
-                      hintText: 'Email (optional)',
-                      prefixIcon: Icon(Icons.email, color: AppTheme.primaryColor),
-                    ),
-                    enabled: !_isLoading,
-                  ),
-                  SizedBox(height: AppTheme.spacingM),
-                ],
-
-                // Login/Register Button
+                // Login Button
                 SizedBox(
                   width: double.infinity,
                   height: 50,
                   child: ElevatedButton(
-                    onPressed: _isLoading
-                        ? null
-                        : (_isExistingUser ? _handleLogin : _handleRegister),
+                    onPressed: _isLoading ? null : _handleLogin,
                     child: _isLoading
                         ? SizedBox(
                             height: 20,
                             width: 20,
                             child: CircularProgressIndicator(
-                              strokeWidth: 2,
+                              strokeWidth: 2.5,
                               valueColor: AlwaysStoppedAnimation(
                                 AppTheme.backgroundColor,
                               ),
                             ),
                           )
-                        : Text(_isExistingUser ? 'LOGIN' : 'GET STARTED'),
+                        : Text(
+                            'CONTINUE',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1,
+                            ),
+                          ),
                   ),
                 ),
                 SizedBox(height: AppTheme.spacingM),
 
-                // Toggle button (if not loading)
-                if (!_isLoading)
-                  TextButton(
-                    onPressed: () {
-                      setState(() => _isExistingUser = !_isExistingUser);
-                    },
-                    child: Text(
-                      _isExistingUser
-                          ? 'New user? Get started'
-                          : 'Existing user? Login',
-                      style: AppTheme.bodyMedium.copyWith(
-                        color: AppTheme.primaryColor,
+                // Google Button
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: OutlinedButton.icon(
+                    onPressed: _isLoading ? null : _handleLogin,
+                    icon: Text('G'),
+                    label: Text(
+                      'CONTINUE WITH GOOGLE',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(
+                        color: AppTheme.primaryColor.withOpacity(0.5),
+                        width: 1.5,
                       ),
                     ),
                   ),
+                ),
+
+                SizedBox(height: AppTheme.spacingL),
+
+                // Description
+                Container(
+                  padding: EdgeInsets.all(AppTheme.spacingM),
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: AppTheme.primaryColor.withOpacity(0.2),
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                    color: AppTheme.primaryColor.withOpacity(0.05),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.shield,
+                            color: AppTheme.primaryColor,
+                            size: 18,
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'SECURE BOARD LEARNING PORTAL',
+                              style: AppTheme.bodySmall.copyWith(
+                                color: AppTheme.primaryColor,
+                                fontSize: 10,
+                                letterSpacing: 1,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 12),
+                      Text(
+                        'Access high-yield board question banks, simulations & notes',
+                        style: AppTheme.bodySmall.copyWith(
+                          color: AppTheme.textSecondaryColor,
+                          fontSize: 11,
+                          height: 1.5,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+
+                SizedBox(height: 60),
               ],
             ),
           ),
@@ -236,9 +338,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
-    _nameController.dispose();
     _phoneController.dispose();
-    _emailController.dispose();
     super.dispose();
   }
 }
